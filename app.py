@@ -5,6 +5,8 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 from streamlit_folium import st_folium
 import folium
+import matplotlib.dates as mdates
+
 
 st.set_page_config(
     page_title="Vsk Nimbus 🌤️",
@@ -125,7 +127,7 @@ if st.button("Fetch Weather Data"):
             ax.set_xlabel("Year")
             ax.set_ylabel(var)
             ax.set_title(f"{var} on {date.strftime('%B %d')} over past {years_back} years")
-            ax.xaxis.set_major_formatter(DateFormatter("%Y"))
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
             ax.legend()
             st.pyplot(fig)
             
@@ -157,3 +159,4 @@ if st.button("Fetch Weather Data"):
 # ----------------------------
 st.markdown("---")
 st.markdown("<center>Made by Vivan Kapileshwarkar</center>", unsafe_allow_html=True)
+
