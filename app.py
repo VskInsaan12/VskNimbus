@@ -30,8 +30,8 @@ st.markdown("<p style='text-align:center'>Predict historical probability of weat
 # ----------------------------
 # Meteomatics Credentials
 # ----------------------------
-METEOMATICS_USERNAME = "kapileshwarkar_vivan"
-METEOMATICS_PASSWORD = "2wtUESzE3C4SW9012x4y"
+METEOMATICS_USERNAME = "insaan_vsk"
+METEOMATICS_PASSWORD = "g1228qgzukF8nj2X5ES9"
 BASE_URL = "https://api.meteomatics.com"
 
 # ----------------------------
@@ -195,3 +195,4 @@ if "all_data" in st.session_state and st.session_state.all_data:
 # ----------------------------
 st.markdown("---")
 st.markdown("<center>Made by Vivan Kapileshwarkar</center>", unsafe_allow_html=True)
+
