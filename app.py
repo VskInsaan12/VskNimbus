@@ -7,6 +7,7 @@ from datetime import datetime
 from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 import matplotlib.dates as mdates
+from streamlit_echarts import st_echarts  # for gauge
 
 # ----------------------------
 # App Configuration
@@ -21,11 +22,11 @@ st.set_page_config(
 # Logo and Title
 # ----------------------------
 st.markdown("""
-    <div style="text-align:center">
-        <img src="vsk_nimbus_logo.png" width="120">
-        <h1>☁️ Vsk Nimbus: Weather Probability Dashboard</h1>
-        <p>Predict historical probability of weather conditions for a location and date</p>
-    </div>
+<div style="text-align:center">
+    <img src="vsk_nimbus_logo.png" width="120">
+    <h1>☁️ Vsk Nimbus: Weather Probability Dashboard</h1>
+    <p>Predict historical probability of weather conditions for a location and date</p>
+</div>
 """, unsafe_allow_html=True)
 
 # ----------------------------
@@ -40,18 +41,18 @@ BASE_URL = "https://api.meteomatics.com"
 # ----------------------------
 if st.button("❓ Get Help"):
     st.info("""
-    **How to use Vsk Nimbus:**
-    1. Click on the map to select your location (a single pin will move to your click).  
-    2. Use the sidebar to select:  
-       - Weather variables (temperature, precipitation, windspeed).  
-       - Threshold values to define extreme conditions.  
-       - Date and number of years back for historical analysis.  
-    3. Click 'Fetch Weather Data' to view:  
-       - Time-trend graphs (red dots indicate extreme values).  
-       - Probability of exceeding thresholds.  
-       - Recommendations on whether it’s safe to plan outdoor activities.  
-    4. Download the data as CSV if needed.
-    """)
+**How to use Vsk Nimbus:**
+1. Click on the map to select your location (a single pin will move instantly).  
+2. Use the sidebar to select:  
+   - Weather variables (temperature, precipitation, windspeed).  
+   - Threshold values to define extreme conditions.  
+   - Date and number of years back for historical analysis.  
+3. Click 'Fetch Weather Data' to view:  
+   - Time-trend graphs (red dots indicate extreme values).  
+   - Probability of exceeding thresholds.  
+   - Color-coded gauge showing safety.  
+4. Download the data as CSV if needed.
+""")
 
 # ----------------------------
 # Sidebar Inputs
@@ -75,25 +76,24 @@ for var in variables_selected:
 date = st.sidebar.date_input("Select Date", datetime.today())
 
 # ----------------------------
-# Map (Single Movable Pin + Heatmap placeholder)
+# Pin Selection Map (Instant)
 # ----------------------------
 st.subheader("📍 Select Location on Map")
-default_lat, default_lon = 20, 0
 if "last_clicked" not in st.session_state:
-    st.session_state["last_clicked"] = (default_lat, default_lon)
+    st.session_state["last_clicked"] = (20, 0)  # Default lat/lon
 
 lat, lon = st.session_state["last_clicked"]
-m = folium.Map(location=[lat, lon], zoom_start=4)
-folium.Marker([lat, lon], popup="Selected Location", tooltip="Selected Location").add_to(m)
-map_data = st_folium(m, width=700, height=450)
+map_select = folium.Map(location=[lat, lon], zoom_start=4)
+folium.Marker([lat, lon], popup="Selected Location", tooltip="Selected Location").add_to(map_select)
 
-if map_data and map_data["last_clicked"]:
-    lat, lon = map_data["last_clicked"]["lat"], map_data["last_clicked"]["lng"]
+map_click = st_folium(map_select, width=700, height=450, returned_objects=["last_clicked"])
+if map_click and map_click["last_clicked"]:
+    lat, lon = map_click["last_clicked"]["lat"], map_click["last_clicked"]["lng"]
     st.session_state["last_clicked"] = (lat, lon)
     st.success(f"Selected Location: Latitude {lat:.4f}, Longitude {lon:.4f}")
 
 # ----------------------------
-# Function to Fetch Historical Data
+# Fetch Historical Data Function
 # ----------------------------
 def fetch_historical(lat, lon, date, years_back, parameter):
     dfs = []
@@ -118,19 +118,35 @@ def fetch_historical(lat, lon, date, years_back, parameter):
         return None
 
 # ----------------------------
-# Function to fetch heatmap grid data (optional, simulated)
+# Heatmap using real Meteomatics grid
 # ----------------------------
 def fetch_heatmap_data(lat, lon, parameter):
-    # Simulate 10x10 grid around pin for demo purposes
-    lats = [lat + (i-5)*0.5 for i in range(10)]
-    lons = [lon + (i-5)*0.5 for i in range(10)]
-    heatmap_data = [[lats[i%10], lons[i//10], max(0, 30-i)] for i in range(100)]
-    return heatmap_data
+    heat_data = []
+    grid_step = 0.5
+    for i in range(-5,5):
+        for j in range(-5,5):
+            glat = lat + i*grid_step
+            glon = lon + j*grid_step
+            try:
+                today = date.strftime("%Y-%m-%d")
+                url = f"{BASE_URL}/{today}T12:00:00Z/{parameter}/{glat},{glon}/json"
+                response = requests.get(url, auth=(METEOMATICS_USERNAME, METEOMATICS_PASSWORD))
+                response.raise_for_status()
+                val = float(response.json()["data"][0]["coordinates"][0]["dates"][0]["value"])
+                heat_data.append([glat, glon, val])
+            except:
+                continue
+    return heat_data
 
 # ----------------------------
-# Fetch Data and Display
+# Persistent Data Storage
 # ----------------------------
-if st.button("Fetch Weather Data"):
+if "all_data" not in st.session_state:
+    st.session_state.all_data = None
+
+# Fetch data only on button click
+fetch_clicked = st.button("Fetch Weather Data")
+if fetch_clicked:
     st.info("Fetching historical data... ⏳")
     all_data = {}
     for var in variables_selected:
@@ -140,56 +156,76 @@ if st.button("Fetch Weather Data"):
             all_data[var] = df
         else:
             st.warning(f"No data available for {var}")
+    st.session_state.all_data = all_data
 
-    if all_data:
-        st.success(f"✅ Data fetched successfully for {len(all_data)} variable(s)")
+# ----------------------------
+# Display Graphs, Heatmap, CSV, Gauge
+# ----------------------------
+if st.session_state.all_data:
+    all_data = st.session_state.all_data
+    st.success(f"✅ Data fetched successfully for {len(all_data)} variable(s)")
 
-        # Display multi-variable graphs
-        for var, df in all_data.items():
-            st.subheader(f"{var}")
-            fig, ax = plt.subplots(figsize=(10,4))
-            ax.plot(df["validdate"], df["value"], marker='o', linestyle='-', color='skyblue', label=var)
-            # Red dots for extreme values
-            df_extreme = df[df["value"] > thresholds[var]]
-            if not df_extreme.empty:
-                ax.scatter(df_extreme["validdate"], df_extreme["value"], color='red', s=80, zorder=5, label=f'> {thresholds[var]}')
-            ax.set_xlabel("Year")
-            ax.set_ylabel(var)
-            ax.set_title(f"{var} on {date.strftime('%B %d')} over past {years_back} years")
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
-            ax.legend()
-            st.pyplot(fig)
+    for var, df in all_data.items():
+        st.subheader(f"{var}")
+        fig, ax = plt.subplots(figsize=(10,4))
+        ax.plot(df["validdate"], df["value"], marker='o', linestyle='-', color='skyblue', label=var)
+        df_extreme = df[df["value"] > thresholds[var]]
+        if not df_extreme.empty:
+            ax.scatter(df_extreme["validdate"], df_extreme["value"], color='red', s=80, zorder=5, label=f'> {thresholds[var]}')
+        ax.set_xlabel("Year")
+        ax.set_ylabel(var)
+        ax.set_title(f"{var} on {date.strftime('%B %d')} over past {years_back} years")
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+        ax.legend()
+        st.pyplot(fig)
 
-            # Probability & remark
-            prob = (df["value"] > thresholds[var]).sum() / len(df) * 100
-            st.metric(f"Probability > Threshold ({var})", f"{prob:.1f}%")
-            if prob > 50:
-                st.warning("⚠️ High chance of extreme weather — consider postponing outdoor activities.")
-            elif prob > 20:
-                st.info("⚠️ Moderate chance — plan with caution.")
-            else:
-                st.success("✅ Low chance — safe to proceed.")
+        prob = (df["value"] > thresholds[var]).sum() / len(df) * 100
+        st.metric(f"Probability > Threshold ({var})", f"{prob:.1f}%")
 
-        # Heatmap overlay on map
-        st.subheader("🌡️ Heatmap around selected location")
-        heatmap_map = folium.Map(location=[lat, lon], zoom_start=5)
-        for var in variables_selected:
-            heat_data = fetch_heatmap_data(lat, lon, var)
+        # ----------------------------
+        # Color-coded Gauge
+        # ----------------------------
+        gauge_option = {
+            "series": [{
+                "type": 'gauge',
+                "progress": {"show": True},
+                "detail": {"formatter": '{value}%'},
+                "data": [{"value": prob, "name": var}],
+                "axisLine": {"lineStyle": {"width": 20}},
+                "pointer": {"width": 5}
+            }]
+        }
+        st_echarts(options=gauge_option, height="200px")
+
+        # Remark
+        if prob > 50:
+            st.warning("⚠️ High chance of extreme weather — consider postponing outdoor activities.")
+        elif prob > 20:
+            st.info("⚠️ Moderate chance — plan with caution.")
+        else:
+            st.success("✅ Low chance — safe to proceed.")
+
+    # Heatmap
+    st.subheader("🌡️ Heatmap around selected location")
+    heatmap_map = folium.Map(location=[lat, lon], zoom_start=5)
+    for var in variables_selected:
+        heat_data = fetch_heatmap_data(lat, lon, variable_dict[var])
+        if heat_data:
             HeatMap(heat_data, radius=15, blur=10).add_to(heatmap_map)
-        folium.Marker([lat, lon], popup="Selected Location", tooltip="Selected Location").add_to(heatmap_map)
-        st_folium(heatmap_map, width=700, height=450)
+    folium.Marker([lat, lon], popup="Selected Location", tooltip="Selected Location").add_to(heatmap_map)
+    st_folium(heatmap_map, width=700, height=450)
 
-        # CSV download
-        csv_combined = pd.DataFrame()
-        for var, df in all_data.items():
-            temp = df[["validdate","value"]].copy()
-            temp.rename(columns={"value": var}, inplace=True)
-            if csv_combined.empty:
-                csv_combined = temp
-            else:
-                csv_combined = pd.merge(csv_combined, temp, on="validdate", how="outer")
-        csv_bytes = csv_combined.to_csv(index=False).encode("utf-8")
-        st.download_button("Download Combined Data as CSV", csv_bytes, "vsk_nimbus_weather.csv", "text/csv")
+    # CSV download
+    csv_combined = pd.DataFrame()
+    for var, df in all_data.items():
+        temp = df[["validdate","value"]].copy()
+        temp.rename(columns={"value": var}, inplace=True)
+        if csv_combined.empty:
+            csv_combined = temp
+        else:
+            csv_combined = pd.merge(csv_combined, temp, on="validdate", how="outer")
+    csv_bytes = csv_combined.to_csv(index=False).encode("utf-8")
+    st.download_button("Download Combined Data as CSV", csv_bytes, "vsk_nimbus_weather.csv", "text/csv")
 
 # ----------------------------
 # Footer
