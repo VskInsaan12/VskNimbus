@@ -35,21 +35,6 @@ METEOMATICS_PASSWORD = "g1228qgzukF8nj2X5ES9"
 BASE_URL = "https://api.meteomatics.com"
 
 # ----------------------------
-# Help Popup
-# ----------------------------
-if st.button("❓ Get Help"):
-    st.info("""
-**How to use Vsk Nimbus:**
-1. Click on the map to select your location.  
-2. Observe the latitude and longitude displayed above the button.  
-3. Select weather variables (temperature, precipitation, windspeed).  
-4. Set thresholds for extreme conditions.  
-5. Choose the date and number of years for historical analysis.  
-6. Click 'Fetch Weather Data' to view interactive charts and probabilities.  
-7. Download CSV for further analysis.
-""")
-
-# ----------------------------
 # Sidebar Inputs
 # ----------------------------
 st.sidebar.header("Settings")
@@ -77,24 +62,28 @@ date = st.sidebar.date_input("Select Date", datetime.today())
 # Interactive Folium Map
 # ----------------------------
 st.subheader("🌍 Click on the map to select a location")
+
 if "lat" not in st.session_state:
     st.session_state.lat = 20.0
 if "lon" not in st.session_state:
     st.session_state.lon = 0.0
 
-# Create Folium map
 m = folium.Map(location=[st.session_state.lat, st.session_state.lon], zoom_start=4)
-marker = folium.Marker([st.session_state.lat, st.session_state.lon], popup="Selected Location")
-marker.add_to(m)
+
+# Add updated marker
+folium.Marker(
+    [st.session_state.lat, st.session_state.lon],
+    popup=f"Lat: {st.session_state.lat:.2f}, Lon: {st.session_state.lon:.2f}",
+    icon=folium.Icon(color="green", icon="info-sign")
+).add_to(m)
 
 map_data = st_folium(m, width=700, height=400)
 
-# Update coordinates if map clicked
 if map_data and map_data.get("last_clicked"):
     st.session_state.lat = map_data["last_clicked"]["lat"]
     st.session_state.lon = map_data["last_clicked"]["lng"]
 
-# Display coordinates above fetch button
+# Show coords below map
 st.success(f"Selected Latitude: {st.session_state.lat:.6f}, Longitude: {st.session_state.lon:.6f}")
 
 # ----------------------------
@@ -109,7 +98,7 @@ def fetch_historical(lat, lon, date, years_back, parameter):
         except:
             continue
         start = day.strftime("%Y-%m-%d")
-        url = f"{BASE_URL}/{start}T00:00:00Z--{start}T23:59:59Z/{parameter}/{lat},{lon}/json"
+        url = f"{BASE_URL}/{start}T00:00:00Z/{parameter}/{lat},{lon}/json"
         try:
             response = requests.get(url, auth=(METEOMATICS_USERNAME, METEOMATICS_PASSWORD), timeout=10)
             response.raise_for_status()
@@ -118,7 +107,7 @@ def fetch_historical(lat, lon, date, years_back, parameter):
             df["validdate"] = pd.to_datetime(df["date"])
             df["value"] = df["value"].astype(float)
             dfs.append(df)
-        except:
+        except Exception as e:
             continue
     if dfs:
         return pd.concat(dfs)
@@ -128,11 +117,11 @@ def fetch_historical(lat, lon, date, years_back, parameter):
 # ----------------------------
 # Fetch Data Button
 # ----------------------------
-if st.button("Fetch Weather Data"):
+if st.button("📊 Fetch Weather Data"):
     st.info("Fetching historical data... ⏳")
     all_data = {}
     for var in variables_selected:
-        param_code = variable_dict[var].replace(" ", "")
+        param_code = variable_dict[var]
         df = fetch_historical(st.session_state.lat, st.session_state.lon, date, years_back, param_code)
         if df is not None and not df.empty:
             all_data[var] = df
@@ -195,4 +184,3 @@ if "all_data" in st.session_state and st.session_state.all_data:
 # ----------------------------
 st.markdown("---")
 st.markdown("<center>Made by Vivan Kapileshwarkar</center>", unsafe_allow_html=True)
-
