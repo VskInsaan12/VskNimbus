@@ -16,7 +16,7 @@ st.set_page_config(page_title="Vsk Nimbus 🌤️", layout="wide", initial_sideb
 st.title("☁️ Vsk Nimbus — Weather Probability Dashboard")
 
 # ----------------------------
-# Logo (optional)
+# Logo
 # ----------------------------
 try:
     st.image("vsk_nimbus_logo.png", width=120)
@@ -25,19 +25,12 @@ except Exception:
     pass
 
 # ----------------------------
-# Credentials (use secrets for production)
+# Credentials
 # ----------------------------
-# Recommended: place credentials in .streamlit/secrets.toml:
-# [meteomatics]
-# username = "..."
-# password = "..."
 if "meteomatics" in st.secrets:
     METEOMATICS_USERNAME = st.secrets["meteomatics"].get("username")
     METEOMATICS_PASSWORD = st.secrets["meteomatics"].get("password")
-else:
-    # Edit these only if you understand the security implications:
-    METEOMATICS_USERNAME = "insaan_vsk"
-    METEOMATICS_PASSWORD = "g1228qgzukF8nj2X5ES9"
+
 
 BASE_URL = "https://api.meteomatics.com"
 
@@ -253,4 +246,5 @@ if st.session_state.get("all_data"):
 # ----------------------------
 st.markdown("---")
 st.markdown("<center>Made by Vivan Kapileshwarkar</center>", unsafe_allow_html=True)
+
 
