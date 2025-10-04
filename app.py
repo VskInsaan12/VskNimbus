@@ -1,9 +1,13 @@
 import streamlit as st
+import folium
 import requests
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
+from folium.plugins import HeatMap
+from streamlit_folium import st_folium
 import matplotlib.dates as mdates
+from streamlit_echarts import st_echarts  # for gauge
 
 # ----------------------------
 # App Configuration
@@ -17,9 +21,13 @@ st.set_page_config(
 # ----------------------------
 # Logo and Title
 # ----------------------------
-st.image("vsk_nimbus_logo.png", width=120)
-st.markdown("<h1 style='text-align:center'>☁️ Vsk Nimbus: Weather Probability Dashboard</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center'>Predict historical probability of weather conditions for a location and date</p>", unsafe_allow_html=True)
+st.markdown("""
+<div style="text-align:center">
+    <img src="vsk_nimbus_logo.png" width="120">
+    <h1>☁️ Vsk Nimbus: Weather Probability Dashboard</h1>
+    <p>Predict historical probability of weather conditions for a location and date</p>
+</div>
+""", unsafe_allow_html=True)
 
 # ----------------------------
 # Meteomatics Credentials
@@ -34,14 +42,15 @@ BASE_URL = "https://api.meteomatics.com"
 if st.button("❓ Get Help"):
     st.info("""
 **How to use Vsk Nimbus:**
-1. Enter latitude and longitude for your location.  
+1. Click on the map to select your location (a single pin will move instantly).  
 2. Use the sidebar to select:  
    - Weather variables (temperature, precipitation, windspeed).  
    - Threshold values to define extreme conditions.  
    - Date and number of years back for historical analysis.  
 3. Click 'Fetch Weather Data' to view:  
    - Time-trend graphs (red dots indicate extreme values).  
-   - Probability of exceeding thresholds with colored text (green/orange/red).  
+   - Probability of exceeding thresholds.  
+   - Color-coded gauge showing safety.  
 4. Download the data as CSV if needed.
 """)
 
@@ -49,8 +58,6 @@ if st.button("❓ Get Help"):
 # Sidebar Inputs
 # ----------------------------
 st.sidebar.header("Settings")
-lat = st.sidebar.number_input("Latitude", value=20.0, format="%.6f")
-lon = st.sidebar.number_input("Longitude", value=0.0, format="%.6f")
 years_back = st.sidebar.slider("Analyze how many years back?", 10, 40, 20)
 variable_dict = {
     "Temperature (°C)": "t_2m:C",
@@ -67,6 +74,23 @@ for var in variables_selected:
     default_threshold = 30.0 if "Temperature" in var else 10.0
     thresholds[var] = st.sidebar.number_input(f"Threshold for {var}", value=default_threshold)
 date = st.sidebar.date_input("Select Date", datetime.today())
+
+# ----------------------------
+# Pin Selection Map (Instant)
+# ----------------------------
+st.subheader("📍 Select Location on Map")
+if "last_clicked" not in st.session_state:
+    st.session_state["last_clicked"] = (20, 0)  # Default lat/lon
+
+lat, lon = st.session_state["last_clicked"]
+map_select = folium.Map(location=[lat, lon], zoom_start=4)
+folium.Marker([lat, lon], popup="Selected Location", tooltip="Selected Location").add_to(map_select)
+
+map_click = st_folium(map_select, width=700, height=450, returned_objects=["last_clicked"])
+if map_click and map_click["last_clicked"]:
+    lat, lon = map_click["last_clicked"]["lat"], map_click["last_clicked"]["lng"]
+    st.session_state["last_clicked"] = (lat, lon)
+    st.success(f"Selected Location: Latitude {lat:.4f}, Longitude {lon:.4f}")
 
 # ----------------------------
 # Fetch Historical Data Function
@@ -94,6 +118,27 @@ def fetch_historical(lat, lon, date, years_back, parameter):
         return None
 
 # ----------------------------
+# Heatmap using real Meteomatics grid
+# ----------------------------
+def fetch_heatmap_data(lat, lon, parameter):
+    heat_data = []
+    grid_step = 0.5
+    for i in range(-5,5):
+        for j in range(-5,5):
+            glat = lat + i*grid_step
+            glon = lon + j*grid_step
+            try:
+                today = date.strftime("%Y-%m-%d")
+                url = f"{BASE_URL}/{today}T12:00:00Z/{parameter}/{glat},{glon}/json"
+                response = requests.get(url, auth=(METEOMATICS_USERNAME, METEOMATICS_PASSWORD))
+                response.raise_for_status()
+                val = float(response.json()["data"][0]["coordinates"][0]["dates"][0]["value"])
+                heat_data.append([glat, glon, val])
+            except:
+                continue
+    return heat_data
+
+# ----------------------------
 # Persistent Data Storage
 # ----------------------------
 if "all_data" not in st.session_state:
@@ -114,7 +159,7 @@ if fetch_clicked:
     st.session_state.all_data = all_data
 
 # ----------------------------
-# Display Graphs and Probability
+# Display Graphs, Heatmap, CSV, Gauge
 # ----------------------------
 if st.session_state.all_data:
     all_data = st.session_state.all_data
@@ -122,7 +167,7 @@ if st.session_state.all_data:
 
     for var, df in all_data.items():
         st.subheader(f"{var}")
-        fig, ax = plt.subplots(figsize=(8,4))
+        fig, ax = plt.subplots(figsize=(10,4))
         ax.plot(df["validdate"], df["value"], marker='o', linestyle='-', color='skyblue', label=var)
         df_extreme = df[df["value"] > thresholds[var]]
         if not df_extreme.empty:
@@ -134,20 +179,41 @@ if st.session_state.all_data:
         ax.legend()
         st.pyplot(fig)
 
-        # Probability calculation
         prob = (df["value"] > thresholds[var]).sum() / len(df) * 100
-        # Color-coded percentage text
+        st.metric(f"Probability > Threshold ({var})", f"{prob:.1f}%")
+
+        # ----------------------------
+        # Color-coded Gauge
+        # ----------------------------
+        gauge_option = {
+            "series": [{
+                "type": 'gauge',
+                "progress": {"show": True},
+                "detail": {"formatter": '{value}%'},
+                "data": [{"value": prob, "name": var}],
+                "axisLine": {"lineStyle": {"width": 20}},
+                "pointer": {"width": 5}
+            }]
+        }
+        st_echarts(options=gauge_option, height="200px")
+
+        # Remark
         if prob > 50:
-            color = "red"
-            remark = "⚠️ High chance of extreme weather — consider postponing outdoor activities."
+            st.warning("⚠️ High chance of extreme weather — consider postponing outdoor activities.")
         elif prob > 20:
-            color = "orange"
-            remark = "⚠️ Moderate chance — plan with caution."
+            st.info("⚠️ Moderate chance — plan with caution.")
         else:
-            color = "green"
-            remark = "✅ Low chance — safe to proceed."
-        st.markdown(f"<h3 style='color:{color}'>{prob:.1f}% chance > threshold</h3>", unsafe_allow_html=True)
-        st.info(remark)
+            st.success("✅ Low chance — safe to proceed.")
+
+    # Heatmap
+    st.subheader("🌡️ Heatmap around selected location")
+    heatmap_map = folium.Map(location=[lat, lon], zoom_start=5)
+    for var in variables_selected:
+        heat_data = fetch_heatmap_data(lat, lon, variable_dict[var])
+        if heat_data:
+            HeatMap(heat_data, radius=15, blur=10).add_to(heatmap_map)
+    folium.Marker([lat, lon], popup="Selected Location", tooltip="Selected Location").add_to(heatmap_map)
+    st_folium(heatmap_map, width=700, height=450)
 
     # CSV download
     csv_combined = pd.DataFrame()
