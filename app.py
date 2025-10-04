@@ -40,20 +40,19 @@ BASE_URL = "https://api.meteomatics.com"
 if st.button("❓ Get Help"):
     st.info("""
 **How to use Vsk Nimbus:**
-1. Enter latitude and longitude for your location.  
-2. Select weather variables (temperature, precipitation, windspeed).  
-3. Set thresholds for extreme conditions.  
-4. Choose the date and number of years for historical analysis.  
-5. Click 'Fetch Weather Data' to view interactive charts with red dots for extreme values.  
-6. Download CSV for further analysis.
+1. Click on the map to select your location.  
+2. Observe the latitude and longitude displayed above the button.  
+3. Select weather variables (temperature, precipitation, windspeed).  
+4. Set thresholds for extreme conditions.  
+5. Choose the date and number of years for historical analysis.  
+6. Click 'Fetch Weather Data' to view interactive charts and probabilities.  
+7. Download CSV for further analysis.
 """)
 
 # ----------------------------
 # Sidebar Inputs
 # ----------------------------
 st.sidebar.header("Settings")
-lat = st.sidebar.number_input("Latitude", value=20.0, format="%.6f")
-lon = st.sidebar.number_input("Longitude", value=0.0, format="%.6f")
 years_back = st.sidebar.slider("Analyze how many years back?", 10, 40, 20)
 
 variable_dict = {
@@ -73,6 +72,30 @@ for var in variables_selected:
     thresholds[var] = st.sidebar.number_input(f"Threshold for {var}", value=default_threshold)
 
 date = st.sidebar.date_input("Select Date", datetime.today())
+
+# ----------------------------
+# Interactive Folium Map
+# ----------------------------
+st.subheader("🌍 Click on the map to select a location")
+if "lat" not in st.session_state:
+    st.session_state.lat = 20.0
+if "lon" not in st.session_state:
+    st.session_state.lon = 0.0
+
+# Create Folium map
+m = folium.Map(location=[st.session_state.lat, st.session_state.lon], zoom_start=4)
+marker = folium.Marker([st.session_state.lat, st.session_state.lon], popup="Selected Location")
+marker.add_to(m)
+
+map_data = st_folium(m, width=700, height=400)
+
+# Update coordinates if map clicked
+if map_data and map_data.get("last_clicked"):
+    st.session_state.lat = map_data["last_clicked"]["lat"]
+    st.session_state.lon = map_data["last_clicked"]["lng"]
+
+# Display coordinates above fetch button
+st.success(f"Selected Latitude: {st.session_state.lat:.6f}, Longitude: {st.session_state.lon:.6f}")
 
 # ----------------------------
 # Fetch Historical Data Function
@@ -103,21 +126,14 @@ def fetch_historical(lat, lon, date, years_back, parameter):
         return None
 
 # ----------------------------
-# Persistent Data Storage
+# Fetch Data Button
 # ----------------------------
-if "all_data" not in st.session_state:
-    st.session_state.all_data = None
-
-# ----------------------------
-# Fetch Data on Button Click
-# ----------------------------
-fetch_clicked = st.button("Fetch Weather Data")
-if fetch_clicked:
+if st.button("Fetch Weather Data"):
     st.info("Fetching historical data... ⏳")
     all_data = {}
     for var in variables_selected:
         param_code = variable_dict[var].replace(" ", "")
-        df = fetch_historical(lat, lon, date, years_back, param_code)
+        df = fetch_historical(st.session_state.lat, st.session_state.lon, date, years_back, param_code)
         if df is not None and not df.empty:
             all_data[var] = df
         else:
@@ -130,7 +146,7 @@ if fetch_clicked:
 # ----------------------------
 # Display Graphs & Probability
 # ----------------------------
-if st.session_state.all_data:
+if "all_data" in st.session_state and st.session_state.all_data:
     all_data = st.session_state.all_data
     st.success(f"✅ Data fetched successfully for {len(all_data)} variable(s)")
 
@@ -173,14 +189,6 @@ if st.session_state.all_data:
             csv_combined = pd.merge(csv_combined, temp, on="validdate", how="outer")
     csv_bytes = csv_combined.to_csv(index=False).encode("utf-8")
     st.download_button("Download Combined Data as CSV", csv_bytes, "vsk_nimbus_weather.csv", "text/csv")
-
-# ----------------------------
-# Interactive Folium Map
-# ----------------------------
-st.subheader("🌍 Location Map")
-m = folium.Map(location=[lat, lon], zoom_start=6)
-folium.Marker([lat, lon], popup=f"Selected Location ({lat}, {lon})").add_to(m)
-st_data = st_folium(m, width=700, height=400)
 
 # ----------------------------
 # Footer
