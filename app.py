@@ -25,12 +25,19 @@ except Exception:
     pass
 
 # ----------------------------
-# Credentials 
+# Credentials (use secrets for production)
 # ----------------------------
-    
+# Recommended: place credentials in .streamlit/secrets.toml:
+# [meteomatics]
+# username = "..."
+# password = "..."
+if "meteomatics" in st.secrets:
+    METEOMATICS_USERNAME = st.secrets["meteomatics"].get("username")
+    METEOMATICS_PASSWORD = st.secrets["meteomatics"].get("password")
+else:
     # Edit these only if you understand the security implications:
-    METEOMATICS_USERNAME = "insaan_vsk"
-    METEOMATICS_PASSWORD = "g1228qgzukF8nj2X5ES9"
+    METEOMATICS_USERNAME = "<YOUR_METEOMATICS_USERNAME>"
+    METEOMATICS_PASSWORD = "<YOUR_METEOMATICS_PASSWORD>"
 
 BASE_URL = "https://api.meteomatics.com"
 
