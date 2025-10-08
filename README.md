@@ -42,15 +42,12 @@ AI tools (ChatGPT/GPT-5) were utilized to:
 - Graphs with red dots for threshold exceedances.
 - Probability calculations with color-coded remarks.
 - Downloadable CSV of historical weather data.
-- Responsive design for mobile, tablet, desktop, TV, and smartwatches.
-- Help popup explaining how to use the app.
-- Footer crediting the developer.
 
 ---
 
 ## Tools & Technologies
 
-- **Python 3.10+**
+- **Python 3.12**
 - **Streamlit** – interactive web interface
 - **Folium & streamlit_folium** – interactive maps
 - **Pandas** – data handling
@@ -60,10 +57,3 @@ AI tools (ChatGPT/GPT-5) were utilized to:
 
 ---
 
-## Installation
-
-Clone the repository:
-
-```bash
-git clone https://github.com/yourusername/vsk-nimbus.git
-cd vsk-nimbus
