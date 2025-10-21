@@ -31,8 +31,8 @@ if "meteomatics" in st.secrets:
     METEOMATICS_USERNAME = st.secrets["meteomatics"].get("username")
     METEOMATICS_PASSWORD = st.secrets["meteomatics"].get("password")
 else:
-    METEOMATICS_USERNAME = "op_ohm_nivan"
-    METEOMATICS_PASSWORD = "h4JjsbKEF3RRT7v5CXW7"
+    METEOMATICS_USERNAME = "kapileshwarkar_vivan"
+    METEOMATICS_PASSWORD = "2wtUESzE3C4SW9012x4y"
 
 
 BASE_URL = "https://api.meteomatics.com"
@@ -249,6 +249,7 @@ if st.session_state.get("all_data"):
 # ----------------------------
 st.markdown("---")
 st.markdown("<center>Made by Vivan Kapileshwarkar</center>", unsafe_allow_html=True)
+
 
 
 
